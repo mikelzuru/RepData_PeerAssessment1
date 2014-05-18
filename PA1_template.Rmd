@@ -1,20 +1,140 @@
 # Reproducible Research: Peer Assessment 1
 
-
 ## Loading and preprocessing the data
+```{r ex1,echo=TRUE}
+library(lattice)
+library(data.table)
+library(plyr)
 
+data <- read.csv("activity.csv",header=TRUE,sep=",",stringsAsFactors=FALSE)
 
+data$formattedDate <- as.Date(data[,2],format="%Y-%m-%d")
+data$weekDay <- weekdays(data[,4])
+```
 
 ## What is mean total number of steps taken per day?
+```{r ex2,echo=TRUE}
+hist(data$steps)
 
+sumSteps <- tapply(data$steps,data$formattedDate,sum)
+
+hist(sumSteps)
+
+auxData <- data
+auxData <- auxData[!is.na(auxData$steps),]
+```
+
+### Values of the "mean" total number of steps taken per day:
+```{r ex2.1,echo=TRUE}
+meanSteps <- tapply(auxData$steps,auxData$formattedDate,mean)
+meanSteps
+#xtMean <- xtable(meanSteps)
+#print(xtMean, type="html")
+```
+
+### Values of the "median" total number of steps taken per day:
+```{r ex2.2,echo=TRUE}
+medianSteps <- tapply(auxData$steps,auxData$formattedDate,median)
+medianSteps
+#xtMedian <- xtable(medianSteps)
+#print(xtMedian, type="html")
+```
 
 
 ## What is the average daily activity pattern?
+```{r ex3,echo=TRUE}
 
+weekendIndex <- data$weekDay == "sábado" | data$weekDay == "domingo"
+weekdayIndex <- data$weekDay != "sábado" & data$weekDay != "domingo"
+data$weekDayOrWeekEnd[weekendIndex] <- "weekend"
+data$weekDayOrWeekEndId[weekendIndex] <- 2
+data$weekDayOrWeekEnd[weekdayIndex] <- "weekday"
+data$weekDayOrWeekEndId[weekdayIndex] <- 1
+
+data_DT <- data.table(auxData)
+data_DT[,date:=NULL]
+data_DT[,formattedDate:=NULL]
+data_DT[,weekDay:=NULL]
+data_DT[,weekDayOrWeekEnd:=NULL]
+
+intervalsMean <- data_DT[,lapply(.SD,mean),by='interval']
+
+plot(x=intervalsMean$interval,y=intervalsMean$steps,type="l",xlab="5-minute Interval",ylab="Avg Number of steps across all days",main="Time series: Avg nº of steps taken\naveraged across all days")
+```
+
+### Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?
+```{r ex3.1,echo=TRUE}
+maxSteps <- max(intervalsMean$steps)
+maxIndex <- which(intervalsMean$steps == maxSteps)
+```
+
+The 5-minute interval with the maximum number of steps:
+```{r ex3.2,echo=TRUE}
+intervalsMean$interval[maxIndex]
+```
 
 
 ## Imputing missing values
+### Calculate and report the total number of missing values in the dataset
+```{r ex4,echo=TRUE}
+dataClean <- data
+stepsNA <- is.na(dataClean$steps)
+rowsNA <- stepsNA[stepsNA == TRUE]
+```
 
+The number of missing values in the dataset:
+```{r ex4.1,echo=TRUE}
+length(rowsNA)
+```
+
+### Fill in the missing values and create a new dataset (using previously calculated 5-minute interval means):
+```{r ex4.2,echo=TRUE}
+dataClean <- data
+replaceData <- intervalsMean
+replaceData$steps5minAvg <- replaceData$steps
+replaceData[,weekDayOrWeekEndId:=NULL]
+replaceData[,steps:=NULL]
+dfList <- list(dataClean,replaceData)
+dataClean <- join_all(dfList)
+dataClean$steps[stepsNA] <- dataClean$steps5minAvg
+```
+
+### Make histograms (after imputing missing values):
+```{r ex4.3,echo=TRUE}
+hist(dataClean$steps)
+
+sumSteps <- tapply(dataClean$steps,dataClean$formattedDate,sum)
+
+hist(sumSteps)
+```
+
+### Values of the "mean" total number of steps taken per day (after imputing missing values):
+```{r ex4.4,echo=TRUE}
+meanSteps <- tapply(dataClean$steps,dataClean$formattedDate,mean)
+meanSteps
+```
+
+### Values of the "median" total number of steps taken per day (after imputing missing values):
+```{r ex4.5,echo=TRUE}
+medianSteps <- tapply(dataClean$steps,dataClean$formattedDate,median)
+medianSteps
+```
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+```{r ex5,echo=TRUE}
+dataClean_DT <- data.table(dataClean)
+dataClean_DT[,date:=NULL]
+dataClean_DT[,formattedDate:=NULL]
+dataClean_DT[,weekDay:=NULL]
+dataClean_DT[,weekDayOrWeekEnd:=NULL]
+
+intervalsMean <- dataClean_DT[,lapply(.SD,mean),by='interval,weekDayOrWeekEndId']
+
+weekDayIndex <- intervalsMean$weekDayOrWeekEndId == 1
+weekEndIndex <- intervalsMean$weekDayOrWeekEndId == 2
+intervalsMean$weekDay[weekDayIndex] <- "WeekDay"
+intervalsMean$weekDay[weekEndIndex] <- "WeekEnd"
+
+xyplot(intervalsMean$steps ~ intervalsMean$interval | intervalsMean$weekDay, layout = c(1, 2),type="l",xlab="Interval",ylab="Number of steps")
+```
